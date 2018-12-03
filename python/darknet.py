@@ -1,6 +1,8 @@
 from ctypes import *
 import math
 import random
+import numpy as np
+import datetime
 
 def sample(probs):
     s = sum(probs)
@@ -114,6 +116,9 @@ predict_image = lib.network_predict_image
 predict_image.argtypes = [c_void_p, IMAGE]
 predict_image.restype = POINTER(c_float)
 
+def b_str(py3_str):
+    return py3_str.encode("ascii")
+
 def classify(net, meta, im):
     out = predict_image(net, im)
     res = []
@@ -122,8 +127,8 @@ def classify(net, meta, im):
     res = sorted(res, key=lambda x: -x[1])
     return res
 
-def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45):
-    im = load_image(image, 0, 0)
+def detect_file(net, meta, image_path, thresh=.5, hier_thresh=.5, nms=.45):
+    im = load_image(b_str(image_path), 0, 0)
     num = c_int(0)
     pnum = pointer(num)
     predict_image(net, im)
@@ -131,16 +136,57 @@ def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45):
     num = pnum[0]
     if (nms): do_nms_obj(dets, num, meta.classes, nms);
 
-    res = []
+    bboxes = []
     for j in range(num):
         for i in range(meta.classes):
             if dets[j].prob[i] > 0:
                 b = dets[j].bbox
-                res.append((meta.names[i], dets[j].prob[i], (b.x, b.y, b.w, b.h)))
-    res = sorted(res, key=lambda x: -x[1])
+                bboxes.append((str(meta.names[i], "utf-8"), dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+    bboxes = sorted(bboxes, key=lambda x: -x[1])
     free_image(im)
     free_detections(dets, num)
-    return res
+    return bboxes
+
+def detect(net, meta, image, thresh=.5, hier_thresh=.5, nms=.45):
+    #ts = datetime.datetime.now()
+
+    arr = image.transpose(2,0,1)
+    c, h, w = arr.shape[0:3]
+    arr = np.ascontiguousarray(arr.flat, dtype=np.float32)/255.0
+    data = arr.ctypes.data_as(POINTER(c_float))
+    im = IMAGE(w,h,c,data)
+    rgbgr_image(im)
+
+    num = c_int(0)
+    pnum = pointer(num)
+    predict_image(net, im)
+    dets = get_network_boxes(net, im.w, im.h, thresh, hier_thresh, None, 0, pnum)
+    num = pnum[0]
+    if (nms): do_nms_obj(dets, num, meta.classes, nms);
+    
+    bboxes = []
+    for j in range(num):
+        probs = np.ctypeslib.as_array((c_float * meta.classes).from_address(addressof(dets[j].prob.contents)))
+        prob = np.nonzero(probs)[0]
+        if prob.shape[0]>0:
+            print(prob)
+            for i in prob:
+                b = dets[j].bbox
+                bboxes.append((str(meta.names[i], "utf-8"), dets[j].prob[i], (b.x, b.y, b.w, b.h)))
+                
+    #te = datetime.datetime.now()
+    #print(te-ts)
+    free_detections(dets, num)
+
+    return bboxes
+
+def network(net_cfg, weights_file):
+    net = load_net(b_str(net_cfg), b_str(weights_file), 0)
+    return net
+
+def metadata(meta):
+    meta = load_meta(b_str(meta))
+    return meta
     
 if __name__ == "__main__":
     #net = load_net("cfg/densenet201.cfg", "/home/pjreddie/trained/densenet201.weights", 0)
@@ -148,9 +194,11 @@ if __name__ == "__main__":
     #meta = load_meta("cfg/imagenet1k.data")
     #r = classify(net, meta, im)
     #print r[:10]
-    net = load_net("cfg/tiny-yolo.cfg", "tiny-yolo.weights", 0)
-    meta = load_meta("cfg/coco.data")
-    r = detect(net, meta, "data/dog.jpg")
-    print r
+    net_cfg="cfg/yolo9000.cfg"
+    net_weight="yolo9000.weights"
+    meta = "cfg/combine9k.data"
+
+    r = detect_file(net_cfg, net_weight, meta, "data/dog.jpg")
+    print(r)
     
 
