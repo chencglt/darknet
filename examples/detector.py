@@ -4,21 +4,21 @@
 # Use at your own risk. or don't, i don't care
 
 import sys, os
-sys.path.append(os.path.join(os.getcwd(),'python/'))
-
-import darknet as dn
-import pdb
 import cv2
 
-net_cfg="cfg/yolo9000.cfg"
-weights="yolo9000.weights"
-meta_cfg = "cfg/combine9k.data"
-# net_cfg="cfg/yolov2.cfg"
-# weights="yolov2.weights"
-# meta_cfg = "cfg/coco.data"
+sys.path.append(os.path.join(os.getcwd(),'python/'))
+import darknet as dn
 
+# net_cfg="cfg/yolo9000.cfg"
+# weights="yolo9000.weights"
+# meta_cfg = "cfg/combine9k.data"
 
-dn.set_gpu(0)
+net_cfg="cfg/yolov2.cfg"
+weights="yolov2.weights"
+meta_cfg = "cfg/coco.data"
+
+net = dn.network(net_cfg, weights)
+meta = dn.metadata(meta_cfg)
 
 def draw_box(img, results):
     for box in results:
@@ -32,39 +32,33 @@ def draw_box(img, results):
     return img
 
 def detect_video(video_path):
-    capture = cv2.VideoCapture(video_path)
-    read_flag, frame = capture.read()
-
     net = dn.network(net_cfg, weights)
     meta = dn.metadata(meta_cfg)
 
+    capture = cv2.VideoCapture(video_path)
+    read_flag, frame = capture.read()
     while(read_flag):
         res = dn.detect(net, meta, frame)
         img = draw_box(frame, res)
         cv2.imshow("frame", img)
-        
-        cv2.waitKey(2)
+        cv2.waitKey(0)
         read_flag, frame = capture.read()
 
     capture.release()
 
 def detect_image(image_path):
-    capture = cv2.VideoCapture(video_path)
-    read_flag, frame = capture.read()
-
     net = dn.network(net_cfg, weights)
     meta = dn.metadata(meta_cfg)
 
-    while(read_flag):
-        res = dn.detect(net, meta, frame)
-        img = draw_box(frame, res)
-        cv2.imshow("frame", img)
+    img = cv2.imread(image_path)
+    res = dn.detect(net, meta, img)
+    img = draw_box(img, res)
+    cv2.imshow("frame", img)
+    cv2.waitKey(0)
+
+    return res
         
-        cv2.waitKey(2)
-        read_flag, frame = capture.read()
 
-    capture.release()
-
-detect_video("data/videos/video7.mp4")
+detect_video("data/videos/city.mp4")
 
 
